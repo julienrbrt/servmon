@@ -1,17 +1,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path"
 	"runtime"
+	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	version     = "1.0.0"
 	flagConfig  = "config"
 	flagDaemon  = "daemon"
 	cfgFile     string
@@ -23,6 +25,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error getting user home directory: %v", err)
 		os.Exit(1)
+	}
+
+	version, err := getVersion()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error getting version: %v", err)
+		version = "unknown"
 	}
 
 	rootCmd := &cobra.Command{
@@ -116,4 +124,13 @@ func runAsDaemonProcess() (int, error) {
 	}
 
 	return 0, fmt.Errorf("daemon mode is not supported on %s", runtime.GOOS)
+}
+
+func getVersion() (string, error) {
+	version, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", errors.New("failed to get version")
+	}
+
+	return strings.TrimSpace(version.Main.Version), nil
 }
