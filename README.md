@@ -2,6 +2,7 @@
 
 KISS server monitoring tool with email alerts.
 For those who want to keep it simple instead of using Prometheus, Grafana, and Alertmanager.
+It uses the awesome [gopsutil](https://github.com/shirou/gopsutil) library to get system metrics.
 
 Monitors:
 
