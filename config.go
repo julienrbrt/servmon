@@ -15,19 +15,15 @@ type Config struct {
 }
 
 type Thresholds struct {
-	CPU    CPU    `yaml:"cpu"`
-	Memory Memory `yaml:"memory"`
-	HTTP   HTTP   `yaml:"http"`
+	CPU    ThresholdConfig `yaml:"cpu"`
+	Memory ThresholdConfig `yaml:"memory"`
+	Disk   ThresholdConfig `yaml:"disk"`
+	HTTP   HTTP            `yaml:"http"`
 }
 
-type CPU struct {
+type ThresholdConfig struct {
 	Threshold float64       `yaml:"threshold"`
-	Duration  time.Duration `yaml:"duration"`
-	Cooldown  time.Duration `yaml:"cooldown"`
-}
-
-type Memory struct {
-	Threshold float64       `yaml:"threshold"`
+	Duration  time.Duration `yaml:"duration,omitempty"`
 	Cooldown  time.Duration `yaml:"cooldown"`
 }
 
@@ -65,14 +61,18 @@ func (c *Config) Save(path string) error {
 func defaultConfig() *Config {
 	return &Config{
 		AlertThresholds: Thresholds{
-			CPU: CPU{
+			CPU: ThresholdConfig{
 				Threshold: 90,
 				Duration:  5 * time.Minute,
 				Cooldown:  30 * time.Minute,
 			},
-			Memory: Memory{
+			Memory: ThresholdConfig{
 				Threshold: 80,
 				Cooldown:  30 * time.Minute,
+			},
+			Disk: ThresholdConfig{
+				Threshold: 90,
+				Cooldown:  4 * time.Hour,
 			},
 			HTTP: HTTP{
 				URL:              "http://localhost:8080/health",

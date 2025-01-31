@@ -50,6 +50,7 @@ func main() {
 
 			go monitorCPU(cfg)
 			go monitorMemory(cfg)
+			go monitorDisk(cfg)
 			go monitorHTTP(cfg)
 
 			select {} // keep alive

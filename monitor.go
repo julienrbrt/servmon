@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
@@ -16,7 +17,7 @@ func monitorCPU(cfg *Config) {
 
 	alertCooldown := time.NewTimer(cfg.AlertThresholds.CPU.Cooldown)
 	for {
-		percent, err := cpu.Percent(time.Duration(1)*time.Second, false)
+		percent, err := cpu.Percent(cfg.AlertThresholds.CPU.Duration, false)
 		if err != nil {
 			log.Printf("Error getting CPU usage: %v", err)
 			time.Sleep(1 * time.Second)
@@ -28,7 +29,6 @@ func monitorCPU(cfg *Config) {
 		for _, p := range percent {
 			total += p
 		}
-
 		avg := total / float64(len(percent))
 
 		if avg > cfg.AlertThresholds.CPU.Threshold {
@@ -91,6 +91,42 @@ func monitorMemory(cfg *Config) {
 	}
 }
 
+func monitorDisk(cfg *Config) {
+	log.Printf("Monitoring disk usage with threshold %.2f%% and cooldown %v", cfg.AlertThresholds.Disk.Threshold, cfg.AlertThresholds.Disk.Cooldown)
+
+	alertCooldown := time.NewTimer(cfg.AlertThresholds.Disk.Cooldown)
+	for {
+		usage, err := disk.Usage("/")
+		if err != nil {
+			log.Printf("Error getting disk usage: %v", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		usedPercent := usage.UsedPercent
+		if usedPercent > cfg.AlertThresholds.Disk.Threshold {
+			// Check if we're within the cooldown period
+			select {
+			case <-alertCooldown.C:
+				// Cooldown expired, check again
+				alertCooldown.Reset(cfg.AlertThresholds.Disk.Cooldown)
+			default:
+				// Within cooldown, skip alert
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			err := sendEmail(fmt.Sprintf("Disk Usage Alert: %.2f%%", usedPercent),
+				fmt.Sprintf("Disk usage of %.2f%% has exceeded the threshold of %.2f%%", usedPercent, cfg.AlertThresholds.Disk.Threshold), cfg)
+			if err != nil {
+				log.Printf("Error sending email: %v", err)
+			}
+		}
+
+		time.Sleep(time.Duration(1) * time.Second)
+	}
+}
+
 func monitorHTTP(cfg *Config) {
 	log.Printf("Monitoring HTTP checks (%s) with threshold %.2f%% and cooldown %v", cfg.AlertThresholds.HTTP.URL, cfg.AlertThresholds.HTTP.FailureThreshold, cfg.AlertThresholds.HTTP.Cooldown)
 
@@ -113,12 +149,13 @@ func monitorHTTP(cfg *Config) {
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), cfg.AlertThresholds.HTTP.Timeout)
-			defer cancel()
 
 			resp, err := client.Do(req.WithContext(ctx))
 			if err != nil || resp.StatusCode >= 400 {
 				failureCount++
 			}
+
+			cancel()
 		}
 
 		// Calculate failure rate
