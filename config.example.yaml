@@ -1,0 +1,21 @@
+alert_thresholds:
+    cpu:
+        threshold: 90
+        duration: 5m0s
+        cooldown: 30m0s
+    memory:
+        threshold: 80
+        cooldown: 30m0s
+    http:
+        url: http://localhost:8080/health
+        timeout: 5s
+        sample_rate: 10
+        failure_threshold: 20
+        check_interval: 1m0s
+        cooldown: 15m0s
+email:
+    smtp_server: smtp.example.com
+    from: alerts@example.com
+    to: admin@example.com
+    username: alertuser
+    password: alertpassword
