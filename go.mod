@@ -3,14 +3,14 @@ module github.com/julienrbrt/servmon
 go 1.23.4
 
 require (
-	github.com/shirou/gopsutil/v4 v4.25.4
+	github.com/shirou/gopsutil/v4 v4.25.5
 	github.com/spf13/cobra v1.9.1
 	github.com/wneessen/go-mail v0.6.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/ebitengine/purego v0.8.2 // indirect
+	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
