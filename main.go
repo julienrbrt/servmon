@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -75,12 +78,34 @@ func main() {
 				return err
 			}
 
-			go monitorCPU(cfg)
-			go monitorMemory(cfg)
-			go monitorDisk(cfg)
-			go monitorHTTP(cfg)
+			// Set up signal handling for graceful shutdown
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-			select {} // keep alive
+			// Create context for graceful shutdown
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Start monitoring goroutines
+			go monitorCPU(ctx, cfg)
+			go monitorMemory(ctx, cfg)
+
+			for _, diskCfg := range cfg.AlertThresholds.Disks {
+				go monitorDisk(ctx, cfg, diskCfg)
+			}
+
+			if cfg.AlertThresholds.HTTP.URL != "" {
+				go monitorHTTP(ctx, cfg)
+			}
+
+			cmd.Println("Servmon started successfully. Monitoring active.")
+			cmd.Println("Press Ctrl+C to stop.")
+
+			// Wait for shutdown signal
+			sig := <-sigChan
+			cmd.Printf("\nReceived signal %v, shutting down gracefully...\n", sig)
+			cancel()
+			return nil
 		},
 	}
 
@@ -123,7 +148,7 @@ func runAsDaemonProcess() (int, error) {
 		return pid, nil
 	}
 
-	return 0, fmt.Errorf("daemon mode is not supported on %s", runtime.GOOS)
+	return 0, fmt.Errorf("daemon mode is only supported on Linux and FreeBSD, not on %s", runtime.GOOS)
 }
 
 func getVersion() (string, error) {
