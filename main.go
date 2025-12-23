@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -101,6 +102,35 @@ func main() {
 			cmd.Println("Servmon started successfully. Monitoring active.")
 			cmd.Println("Press Ctrl+C to stop.")
 
+			// Send email notification that monitoring is now active
+			go func() {
+				hostname, err := os.Hostname()
+				if err != nil {
+					hostname = "unknown"
+				}
+
+				subject := fmt.Sprintf("Monitoring Active on %s", hostname)
+				body := fmt.Sprintf("ServMon has started successfully and is now actively monitoring:\n\n"+
+					"- CPU threshold: %.1f%%\n"+
+					"- Memory threshold: %.1f%%\n"+
+					"- Disk paths: %s\n",
+					cfg.AlertThresholds.CPU.Threshold,
+					cfg.AlertThresholds.Memory.Threshold,
+					getDiskPaths(cfg))
+
+				if cfg.AlertThresholds.HTTP.URL != "" {
+					body += fmt.Sprintf("- HTTP endpoint: %s\n", cfg.AlertThresholds.HTTP.URL)
+				}
+
+				body += fmt.Sprintf("\nMonitoring started at: %s", time.Now().Format(time.RFC1123))
+
+				if err := sendEmail(subject, body, cfg); err != nil {
+					cmd.Printf("Warning: Failed to send monitoring active notification: %v\n", err)
+				} else {
+					cmd.Println("Monitoring active notification sent successfully.")
+				}
+			}()
+
 			// Wait for shutdown signal
 			sig := <-sigChan
 			cmd.Printf("\nReceived signal %v, shutting down gracefully...\n", sig)
@@ -158,4 +188,13 @@ func getVersion() (string, error) {
 	}
 
 	return strings.TrimSpace(version.Main.Version), nil
+}
+
+// getDiskPaths returns a comma-separated list of monitored disk paths
+func getDiskPaths(cfg *Config) string {
+	var paths []string
+	for _, disk := range cfg.AlertThresholds.Disks {
+		paths = append(paths, disk.Path)
+	}
+	return strings.Join(paths, ", ")
 }
