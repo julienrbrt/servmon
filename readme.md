@@ -50,6 +50,11 @@ cp .servmon.example.yaml config/.servmon.yaml
 docker run -d \
   --name servmon \
   --restart unless-stopped \
+  --pid=host \
+  --network=host \
+  -v /:/host:ro \
+  -v /sys:/sys:ro \
+  -v /proc:/proc:ro \
   -v $(pwd)/config/.servmon.yaml:/root/.servmon.yaml:ro \
   servmon
 ```
