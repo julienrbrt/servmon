@@ -5,23 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/julienrbrt/servmon/internal/alert"
+	"github.com/julienrbrt/servmon/internal/config"
+	"github.com/julienrbrt/servmon/internal/monitor"
+
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagConfig  = "config"
-	flagDaemon  = "daemon"
-	cfgFile     string
-	runAsDaemon bool
+	flagConfig = "config"
+	cfgFile    string
 )
 
 func main() {
@@ -39,44 +39,37 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:     "servmon",
-		Short:   "KISS server monitoring tool with email alerts",
+		Short:   "Server monitoring tool with email alerts",
 		Version: version,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			runAsDaemon, err := cmd.Flags().GetBool(flagDaemon)
-			if err != nil {
-				return fmt.Errorf("error getting flag %s: %v", flagDaemon, err)
-			}
-
-			if runAsDaemon {
-				pid, err := runAsDaemonProcess()
-				if err != nil {
-					return err
-				}
-
-				cmd.Println("Running as daemon with PID", pid)
-				return nil
-			}
-
 			cfgPath, err := cmd.Flags().GetString(flagConfig)
 			if err != nil {
 				return fmt.Errorf("error getting flag %s: %v", flagConfig, err)
 			}
 
 			if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-				cfg := defaultConfig()
+				cfg := config.Default()
 				if err := cfg.Save(cfgFile); err != nil {
 					return err
 				}
 
-				cmd.Println("Configuration file generated at", cfgFile)
+				cmd.Println("✓ Configuration file generated at", cfgFile)
+				cmd.Println("Please edit the configuration file and restart servmon")
 				return nil
 			} else if err != nil {
 				return fmt.Errorf("error checking config file: %v", err)
 			}
 
-			cfg, err := loadConfig(cfgPath)
+			cfg, err := config.Load(cfgPath)
 			if err != nil {
 				return err
+			}
+
+			// Show current system status
+			if status, err := monitor.GetCurrentStatus(); err == nil {
+				cmd.Println()
+				cmd.Println(status)
+				cmd.Println()
 			}
 
 			// Set up signal handling for graceful shutdown
@@ -87,98 +80,79 @@ func main() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			// Start monitoring goroutines
-			go monitorCPU(ctx, cfg)
-			go monitorMemory(ctx, cfg)
+			// Initialize alerter
+			emailAlerter := alert.NewEmailAlerter(alert.EmailConfig{
+				SMTPServer: cfg.Email.SMTPServer,
+				SMTPPort:   cfg.Email.SMTPPort,
+				From:       cfg.Email.From,
+				To:         cfg.Email.To,
+				Username:   cfg.Email.Username,
+				Password:   cfg.Email.Password,
+			})
 
-			for _, diskCfg := range cfg.AlertThresholds.Disks {
-				go monitorDisk(ctx, cfg, diskCfg)
+			// Check for recent reboot and send notification if needed
+			if err := monitor.CheckRebootAndNotify(ctx, cfg, emailAlerter); err != nil {
+				cmd.Printf("Warning: Failed to check reboot status: %v\n", err)
 			}
 
-			if cfg.AlertThresholds.HTTP.URL != "" {
-				go monitorHTTP(ctx, cfg)
-			}
+			// Create monitor with alerter
+			mon := monitor.New(cfg, emailAlerter)
 
-			cmd.Println("Servmon started successfully. Monitoring active.")
-			cmd.Println("Press Ctrl+C to stop.")
+			// Start monitoring
+			mon.Start(ctx)
 
-			// Send email notification that monitoring is now active
+			cmd.Println()
+			cmd.Println("✓ ServMon started successfully. Monitoring active.")
+			cmd.Println("Monitoring in progress... Press Ctrl+C to stop.")
+			cmd.Println()
+
+			// Send startup notification
 			go func() {
 				hostname, err := os.Hostname()
 				if err != nil {
 					hostname = "unknown"
 				}
 
-				subject := fmt.Sprintf("Monitoring Active on %s", hostname)
-				body := fmt.Sprintf("ServMon has started successfully and is now actively monitoring:\n\n"+
-					"- CPU threshold: %.1f%%\n"+
-					"- Memory threshold: %.1f%%\n"+
-					"- Disk paths: %s\n",
-					cfg.AlertThresholds.CPU.Threshold,
-					cfg.AlertThresholds.Memory.Threshold,
-					getDiskPaths(cfg))
+				startupAlert := alert.NewAlert(
+					alert.LevelInfo,
+					fmt.Sprintf("Monitoring Started on %s", hostname),
+					"ServMon has started successfully and is now actively monitoring your system.",
+				)
+
+				startupAlert.WithMetadata("cpu_threshold", fmt.Sprintf("%.1f%%", cfg.AlertThresholds.CPU.Threshold))
+				startupAlert.WithMetadata("memory_threshold", fmt.Sprintf("%.1f%%", cfg.AlertThresholds.Memory.Threshold))
+				startupAlert.WithMetadata("disk_paths", cfg.GetDiskPaths())
 
 				if cfg.AlertThresholds.HTTP.URL != "" {
-					body += fmt.Sprintf("- HTTP endpoint: %s\n", cfg.AlertThresholds.HTTP.URL)
+					startupAlert.WithMetadata("http_endpoint", cfg.AlertThresholds.HTTP.URL)
 				}
 
-				body += fmt.Sprintf("\nMonitoring started at: %s", time.Now().Format(time.RFC1123))
-
-				if err := sendEmail(subject, body, cfg); err != nil {
-					cmd.Printf("Warning: Failed to send monitoring active notification: %v\n", err)
+				if err := emailAlerter.Send(ctx, startupAlert); err != nil {
+					cmd.Printf("Warning: Failed to send startup notification: %v\n", err)
 				} else {
-					cmd.Println("Monitoring active notification sent successfully.")
+					cmd.Println("✓ Startup notification sent successfully")
 				}
 			}()
 
 			// Wait for shutdown signal
 			sig := <-sigChan
-			cmd.Printf("\nReceived signal %v, shutting down gracefully...\n", sig)
+			cmd.Printf("Received signal %v, shutting down gracefully...\n", sig)
 			cancel()
+
+			// Give goroutines time to clean up
+			time.Sleep(1 * time.Second)
+			cmd.Println("✓ ServMon stopped successfully")
 			return nil
 		},
 	}
 
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 	rootCmd.PersistentFlags().StringVar(&cfgFile, flagConfig, path.Join(homeDir, ".servmon.yaml"), "config file")
-	rootCmd.PersistentFlags().BoolVarP(&runAsDaemon, flagDaemon, "d", false, "run as daemon")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
 	}
-}
-
-func runAsDaemonProcess() (int, error) {
-	if runtime.GOOS == "linux" || runtime.GOOS == "freebsd" {
-		var args []string
-		for _, a := range os.Args[1:] {
-			if a != "-d" && a != "--daemon" {
-				args = append(args, a)
-			}
-		}
-
-		cmd := exec.Command(os.Args[0], args...)
-		cmd.Stdout = os.NewFile(3, "log.out")
-		cmd.Stderr = os.NewFile(4, "log.err")
-		cmd.Stdin = os.NewFile(3, "log.in")
-
-		if err := cmd.Start(); err != nil {
-			return 0, fmt.Errorf("error starting as daemon: %v", err)
-		}
-
-		pid := cmd.Process.Pid
-
-		// Detach the process
-		err := cmd.Process.Release()
-		if err != nil {
-			return 0, fmt.Errorf("error detaching process: %v", err)
-		}
-
-		return pid, nil
-	}
-
-	return 0, fmt.Errorf("daemon mode is only supported on Linux and FreeBSD, not on %s", runtime.GOOS)
 }
 
 func getVersion() (string, error) {
@@ -188,13 +162,4 @@ func getVersion() (string, error) {
 	}
 
 	return strings.TrimSpace(version.Main.Version), nil
-}
-
-// getDiskPaths returns a comma-separated list of monitored disk paths
-func getDiskPaths(cfg *Config) string {
-	var paths []string
-	for _, disk := range cfg.AlertThresholds.Disks {
-		paths = append(paths, disk.Path)
-	}
-	return strings.Join(paths, ", ")
 }

@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -16,10 +16,12 @@ type Config struct {
 }
 
 type Thresholds struct {
-	CPU    ThresholdConfig `yaml:"cpu"`
-	Memory ThresholdConfig `yaml:"memory"`
-	Disks  []DiskConfig    `yaml:"disks"`
-	HTTP   HTTP            `yaml:"http"`
+	CPU        ThresholdConfig  `yaml:"cpu"`
+	Memory     ThresholdConfig  `yaml:"memory"`
+	Disks      []DiskConfig     `yaml:"disks"`
+	HTTP       HTTP             `yaml:"http"`
+	Journalctl JournalctlConfig `yaml:"journalctl"`
+	Reboot     RebootConfig     `yaml:"reboot"`
 }
 
 type ThresholdConfig struct {
@@ -45,6 +47,20 @@ type HTTP struct {
 	Cooldown         time.Duration `yaml:"cooldown"`
 }
 
+type JournalctlConfig struct {
+	Enabled        bool          `yaml:"enabled"`
+	CheckInterval  time.Duration `yaml:"check_interval"`
+	LookbackPeriod time.Duration `yaml:"lookback_period"`
+	ErrorThreshold int           `yaml:"error_threshold"`
+	Priorities     []string      `yaml:"priorities"` // err, crit, alert, emerg
+	Cooldown       time.Duration `yaml:"cooldown"`
+}
+
+type RebootConfig struct {
+	Enabled         bool          `yaml:"enabled"`
+	UptimeThreshold time.Duration `yaml:"uptime_threshold"` // If uptime < threshold, send reboot notification
+}
+
 type Email struct {
 	SMTPServer string `yaml:"smtp_server"`
 	SMTPPort   int    `yaml:"smtp_port"`
@@ -67,8 +83,8 @@ func (c *Config) Save(path string) error {
 	return nil
 }
 
-// defaultConfig returns a default configuration for the monitoring service.
-func defaultConfig() *Config {
+// Default returns a default configuration for the monitoring service.
+func Default() *Config {
 	return &Config{
 		AlertThresholds: Thresholds{
 			CPU: ThresholdConfig{
@@ -98,6 +114,18 @@ func defaultConfig() *Config {
 				CheckInterval:    1 * time.Minute,
 				Cooldown:         15 * time.Minute,
 			},
+			Journalctl: JournalctlConfig{
+				Enabled:        true,
+				CheckInterval:  5 * time.Minute,
+				LookbackPeriod: 5 * time.Minute,
+				ErrorThreshold: 10,
+				Priorities:     []string{"err", "crit", "alert", "emerg"},
+				Cooldown:       30 * time.Minute,
+			},
+			Reboot: RebootConfig{
+				Enabled:         true,
+				UptimeThreshold: 10 * time.Minute,
+			},
 		},
 		Email: Email{
 			SMTPServer: "smtp.example.com",
@@ -110,8 +138,8 @@ func defaultConfig() *Config {
 	}
 }
 
-// loadConfig loads a configuration from a file.
-func loadConfig(path string) (*Config, error) {
+// Load loads a configuration from a file.
+func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
@@ -194,6 +222,32 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate Journalctl configuration
+	if c.AlertThresholds.Journalctl.Enabled {
+		if c.AlertThresholds.Journalctl.CheckInterval <= 0 {
+			return fmt.Errorf("journalctl check interval must be positive")
+		}
+		if c.AlertThresholds.Journalctl.LookbackPeriod <= 0 {
+			return fmt.Errorf("journalctl lookback period must be positive")
+		}
+		if c.AlertThresholds.Journalctl.ErrorThreshold <= 0 {
+			return fmt.Errorf("journalctl error threshold must be positive")
+		}
+		if len(c.AlertThresholds.Journalctl.Priorities) == 0 {
+			return fmt.Errorf("journalctl priorities cannot be empty")
+		}
+		if c.AlertThresholds.Journalctl.Cooldown <= 0 {
+			return fmt.Errorf("journalctl cooldown must be positive")
+		}
+	}
+
+	// Validate Reboot configuration
+	if c.AlertThresholds.Reboot.Enabled {
+		if c.AlertThresholds.Reboot.UptimeThreshold <= 0 {
+			return fmt.Errorf("reboot uptime threshold must be positive")
+		}
+	}
+
 	// Validate Email configuration
 	if c.Email.SMTPServer == "" {
 		return fmt.Errorf("SMTP server cannot be empty")
@@ -209,4 +263,13 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// GetDiskPaths returns a comma-separated list of monitored disk paths
+func (c *Config) GetDiskPaths() string {
+	var paths []string
+	for _, disk := range c.AlertThresholds.Disks {
+		paths = append(paths, disk.Path)
+	}
+	return strings.Join(paths, ", ")
 }

@@ -3,7 +3,7 @@ module github.com/julienrbrt/servmon
 go 1.25.1
 
 require (
-	github.com/shirou/gopsutil/v4 v4.25.11
+	github.com/shirou/gopsutil/v4 v4.25.12
 	github.com/spf13/cobra v1.10.2
 	github.com/wneessen/go-mail v0.7.2
 	gopkg.in/yaml.v3 v3.0.1

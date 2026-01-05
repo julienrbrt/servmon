@@ -20,6 +20,20 @@ alert_thresholds:
     failure_threshold: 20
     check_interval: 1m0s
     cooldown: 15m0s
+  journalctl:
+    enabled: true
+    check_interval: 5m0s
+    lookback_period: 5m0s
+    error_threshold: 10
+    priorities:
+      - err
+      - crit
+      - alert
+      - emerg
+    cooldown: 30m0s
+  reboot:
+    enabled: true
+    uptime_threshold: 10m0s
 email:
   smtp_server: smtp.example.com
   smtp_port: 587
