@@ -357,8 +357,8 @@ func GetCurrentStatus() (string, error) {
 // MonitorJournalctl monitors systemd journal logs for errors and critical messages
 func (m *Monitor) MonitorJournalctl(ctx context.Context) {
 	cfg := m.config.AlertThresholds.Journalctl
-	log.Printf("📊 Journalctl Monitor: error_threshold=%d, interval=%v, lookback=%v, priorities=%v, cooldown=%v",
-		cfg.ErrorThreshold, cfg.CheckInterval, cfg.LookbackPeriod, cfg.Priorities, cfg.Cooldown)
+	log.Printf("📊 Journalctl Monitor: error_threshold=%d, interval=%v, lookback=%v, priority=%v, cooldown=%v",
+		cfg.ErrorThreshold, cfg.CheckInterval, cfg.LookbackPeriod, cfg.Priority, cfg.Cooldown)
 
 	alertCooldown := time.NewTimer(0)
 	<-alertCooldown.C
@@ -375,18 +375,17 @@ func (m *Monitor) MonitorJournalctl(ctx context.Context) {
 		}
 
 		// Build journalctl command with priority filters
-		priorityArgs := strings.Join(cfg.Priorities, ",")
 		sinceArg := fmt.Sprintf("%dm ago", int(cfg.LookbackPeriod.Minutes()))
 
 		cmd := exec.CommandContext(ctx, "journalctl", "-x", "-e",
 			"--since", sinceArg,
-			"-p", priorityArgs,
+			"-p", cfg.Priority,
 			"--no-pager",
 			"-o", "short-precise")
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("Error running journalctl: %v", err)
+			log.Printf("Error running journalctl: %v. Output: %s", err, string(output))
 			continue
 		}
 
@@ -459,7 +458,7 @@ func (m *Monitor) MonitorJournalctl(ctx context.Context) {
 				a.WithMetadata("critical_count", criticalCount)
 				a.WithMetadata("threshold", cfg.ErrorThreshold)
 				a.WithMetadata("lookback_period", cfg.LookbackPeriod.String())
-				a.WithMetadata("priorities", strings.Join(cfg.Priorities, ", "))
+				a.WithMetadata("priority", cfg.Priority)
 
 				if len(topErrors) > 0 {
 					a.WithMetadata("top_errors", strings.Join(topErrors, " | "))

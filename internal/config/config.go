@@ -52,7 +52,7 @@ type JournalctlConfig struct {
 	CheckInterval  time.Duration `yaml:"check_interval"`
 	LookbackPeriod time.Duration `yaml:"lookback_period"`
 	ErrorThreshold int           `yaml:"error_threshold"`
-	Priorities     []string      `yaml:"priorities"` // err, crit, alert, emerg
+	Priority       string        `yaml:"priority"` // err, crit, alert, emerg
 	Cooldown       time.Duration `yaml:"cooldown"`
 }
 
@@ -119,7 +119,7 @@ func Default() *Config {
 				CheckInterval:  5 * time.Minute,
 				LookbackPeriod: 5 * time.Minute,
 				ErrorThreshold: 10,
-				Priorities:     []string{"err", "crit", "alert", "emerg"},
+				Priority:       "err",
 				Cooldown:       30 * time.Minute,
 			},
 			Reboot: RebootConfig{
@@ -233,8 +233,8 @@ func (c *Config) Validate() error {
 		if c.AlertThresholds.Journalctl.ErrorThreshold <= 0 {
 			return fmt.Errorf("journalctl error threshold must be positive")
 		}
-		if len(c.AlertThresholds.Journalctl.Priorities) == 0 {
-			return fmt.Errorf("journalctl priorities cannot be empty")
+		if c.AlertThresholds.Journalctl.Priority == "" {
+			return fmt.Errorf("journalctl priority cannot be empty")
 		}
 		if c.AlertThresholds.Journalctl.Cooldown <= 0 {
 			return fmt.Errorf("journalctl cooldown must be positive")

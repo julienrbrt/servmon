@@ -25,11 +25,7 @@ alert_thresholds:
     check_interval: 5m0s
     lookback_period: 5m0s
     error_threshold: 10
-    priorities:
-      - err
-      - crit
-      - alert
-      - emerg
+    priority: err
     cooldown: 30m0s
   reboot:
     enabled: true
