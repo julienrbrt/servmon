@@ -5,7 +5,7 @@ go 1.25.1
 require (
 	github.com/shirou/gopsutil/v4 v4.25.12
 	github.com/spf13/cobra v1.10.2
-	github.com/wneessen/go-mail v0.7.2
+	github.com/wneessen/go-mail v0.8.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -19,6 +19,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/sys v0.39.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 )
