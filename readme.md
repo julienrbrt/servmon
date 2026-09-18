@@ -17,7 +17,7 @@ For those who want to keep it simple instead of using complex setups like Promet
 ## Installation
 
 ```bash
-go install github.com/julienrbrt/servmon@latest
+go install pkg.rbrt.fr/servmon@latest
 ```
 
 ## Configuration

@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/julienrbrt/servmon/internal/alert"
-	"github.com/julienrbrt/servmon/internal/config"
-	"github.com/julienrbrt/servmon/internal/monitor"
+	"pkg.rbrt.fr/servmon/internal/alert"
+	"pkg.rbrt.fr/servmon/internal/config"
+	"pkg.rbrt.fr/servmon/internal/monitor"
 
 	"github.com/spf13/cobra"
 )

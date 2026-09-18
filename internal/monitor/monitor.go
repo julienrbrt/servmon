@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/julienrbrt/servmon/internal/alert"
-	"github.com/julienrbrt/servmon/internal/config"
+	"pkg.rbrt.fr/servmon/internal/alert"
+	"pkg.rbrt.fr/servmon/internal/config"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
